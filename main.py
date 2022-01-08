@@ -3,5 +3,5 @@
 if __name__ = "__main__":
     fetch_images()
     process_data()
-    train_network()
+    # train_network()
     # TODO: Save network.
