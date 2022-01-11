@@ -1,7 +1,5 @@
-# Start pipeline for image preprocessing.
+from image_processing import AstroImgManager
 
-if __name__ = "__main__":
-    fetch_images()
-    process_data()
-    # train_network()
-    # TODO: Save network.
+if __name__ == "__main__":
+    img_manager = AstroImgManager()
+    img_manager.fetch_images()
