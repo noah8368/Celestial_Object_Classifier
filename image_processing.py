@@ -3,48 +3,58 @@
 Define routines to collect and process data from the Hubble Legacy Archive.
 '''
 
-import os
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
+import shutil
 
 from astropy.table import Table
-from getpass import getpass
-from io import BytesIO
-from PIL import Image
 from requests import get
 
 
 class AstroImgManager:
-    """def __init__(self):
-        if not os.environ.get('CASJOBS_USERID'):
-            os.environ['CASJOBS_USERID'] = input('Enter Casjobs UserID: ')
-        if not os.environ.get('CASJOBS_PW'):
-            os.environ['CASJOBS_PW'] = getpass('Enter Casjobs password: ')
-    """
     def fetch_images(self):
-        img_table = self.__query_hubble_legacy_archive(0, 0, 180, "exposure",
-                                                       "WFC3")
-        img_table.pprint_all()
+        # Perform an all-sky search.
+        img_table = self.__query_hubble_legacy_archive(210.802, 54.349, 0.1,
+                                                       "combined", "WFC3")
+        # Save a random image.
+        num_img = len(img_table)
+        self.__save_image(img_table["URL"][np.random.randint(num_img)])
 
-    def __get_image(self, url):
-        req = get(url)
-        return Image.open(BytesIO(req.content))
+        # Display the image.
+        img = mpimg.imread(self.SAMPLE_IMG_NAME)
+        plt.imshow(img)
+        plt.show()
+
+    def __save_image(self, url):
+        req = get(url, stream=True)
+        # Ensure the HTTPS reply's status code indicates success (OK status).
+        OK_STATUS = 200
+        if req.status_code == OK_STATUS:
+            req.raw.decode_content = True
+        else:
+            raise ConnectionError()
+        img_file = open(self.SAMPLE_IMG_NAME, "wb")
+        shutil.copyfileobj(req.raw, img_file)
+        img_file.close()
 
     def __query_hubble_legacy_archive(self, ra, dec, size, data_product, inst,
                                       spectral_elements=(), autoscale=99.5,
-                                      asinh=1, naxis=512, format="jpeg"):
+                                      asinh=1, format="image/jpeg"):
         """Queries image data from the Hubble Legacy Archive.
 
         Args:
             ra, dec: Right ascension and declination. Central position in deg
                      for the cutout.
             size: Radius of the cutout, in degrees.
-            data_product: A specifier to indicate the selection of monochrome
-                       or color images.
+            data_product: Type of image to retrieve. Options are "best",
+                          "exposure", "combined", "mosaic", "color", "hlsp",
+                          and "all".
             inst: Instrument to collect data from on Hubble Space Telescope
             format: Queried data file format.
             spectral elements: A tuple of strings of filter color identifiers.
             autoscale: Percentage of image histogram to retain.
             asinh: If nonzero value, use Lupton asinh contrast algorithm.
-            naxis: Image width, in pixels.
             format: Image file format.
 
         Returns:
@@ -56,17 +66,21 @@ class AstroImgManager:
             spectral_elements = ",".join(spectral_elements)
 
         archive_search_url = ("https://hla.stsci.edu/cgi-bin/hlaSIAP.cgi?"
-                              + "pos={ra},{dec}"
+                              + "POS={ra},{dec}"
                               + "&size={size}"
                               + "&imagetype={data_product}"
                               + "&inst={inst}"
-                              + "&format=image/{format}"
-                              + "&spectral_elt={spectral_elements}"
+                              + "&format={format}"
                               + "&autoscale={autoscale}"
-                              + "&asinh={asinh}"
-                              + "&naxis={naxis}").format(**locals())
-        print(archive_search_url)
+                              + "&asinh={asinh}").format(**locals())
+        if spectral_elements != "":
+            archive_search_url += "&spectral_elt={spectral_elements}".format(
+                **locals()
+            )
         return Table.read(archive_search_url, format="votable")
+
+    SAMPLE_IMG_NAME = "rand_img.jpeg"
+
 
 def process_data():
     # TODO: Implement. (Madison)
