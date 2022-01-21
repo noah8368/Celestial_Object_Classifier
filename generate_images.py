@@ -10,6 +10,7 @@ import os
 import shutil
 
 from astropy.table import Table
+from empty_search import EmptySearch, NotEnoughExposures
 from image_stacking.auto_stack import stackImagesECC
 from requests import get
 
@@ -20,7 +21,58 @@ class AstroImgManager:
         if not os.path.exists(self.data_path):
             os.mkdir(self.data_path)
 
-    def fetch_image(self, ra, dec):
+    def generate_image_set(self, num_images):
+        def generate_rand_loc():
+            ra = round(np.random.uniform(0, 360), 3)
+            dec = round(np.rad2deg(np.arcsin(np.random.uniform(-1, 1))), 3)
+            return ra, dec
+
+        """Generates a set of processed images.
+
+        Randomly generates a set of celestial coordinates and saves a single
+        processed image for each coordinate. If a connection error occurs
+        during image processing for a given coordinate, formation of this image
+        is skipped.
+
+        Args:
+            num_images: Number of images in the data set.
+        """
+
+        prev_locs = []
+        for img_count in range(num_images):
+            ra, dec = generate_rand_loc()
+
+            while True:
+                if (ra, dec) in prev_locs:
+                    # Generate a new location if the current location has
+                    # already been searched.
+                    ra, dec = generate_rand_loc()
+                    continue
+
+                try:
+                    self.__fetch_image(ra, dec)
+                except cv.error:
+                    # Generate a new location if the search returns
+                    # exposures that result in an OpenCV error.
+                    ra, dec = generate_rand_loc()
+                    continue
+                except ConnectionError:
+                    # Retry the same coordinate pair if the connection fails.
+                    continue
+                except EmptySearch:
+                    # Generate a new location if the search returns empty.
+                    ra, dec = generate_rand_loc()
+                    continue
+                except NotEnoughExposures:
+                    # Generate a new location if the search doesn't contain
+                    # a suitable number of exposures.
+                    ra, dec = generate_rand_loc()
+                    continue
+
+                prev_locs.append((ra, dec))
+                break
+
+    def __fetch_image(self, ra, dec):
         """Generates a set of processed images from the Hubble Legacy Archive.
 
         Args:
@@ -30,10 +82,13 @@ class AstroImgManager:
         """
 
         SEARCH_RADIUS = 0.4
+        MIN_NUM_EXPOSURES = 5
         try:
             img_table = self.__query_hubble_legacy_archive(ra, dec,
                                                            SEARCH_RADIUS,
                                                            "exposure", "WFC3")
+            if len(img_table) == 0:
+                raise EmptySearch
         except ValueError:
             print("ERROR: Invalid query options")
         print("Processing exposures at position", str(ra) + ", " + str(dec)
@@ -52,6 +107,8 @@ class AstroImgManager:
         image_index = np.argmax([len(url_list) for url_list in
                                 list(grouped_exposure_urls.values())])
         exposure_urls = list(grouped_exposure_urls.values())[image_index]
+        if len(exposure_urls) < MIN_NUM_EXPOSURES:
+            raise NotEnoughExposures
 
         # Download exposures for each position.
         exposure_count = 0
@@ -64,6 +121,7 @@ class AstroImgManager:
             exposure_path_list.append(exposure_path)
             self.__save_image(exposure_url, exposure_path)
 
+        # Save the stacked image.
         combined_img = stackImagesECC(exposure_path_list)
         ra, dec = list(grouped_exposure_urls.keys())[image_index]
         img_name = os.path.join(self.data_path, str(ra) + "_" + str(dec)
@@ -77,9 +135,9 @@ class AstroImgManager:
         # TODO (Madison): Perform further image filtering.
 
     def __save_image(self, url, path):
-        # Send an HTTPS request to fetch image data. Ensure the HTTPS reply's
-        # status code indicates success (OK status) before continuing.
-        req = get(url, stream=True)  # TODO: Catch ConnectionError exceptions.
+        # Ensure the HTTPS reply's status code indicates success (OK status)
+        # before continuing.
+        req = get(url, stream=True)
         OK_STATUS = 200
         if req.status_code == OK_STATUS:
             req.raw.decode_content = True
@@ -130,6 +188,7 @@ class AstroImgManager:
             )
         return Table.read(archive_search_url, format="votable")
 
+
 if __name__ == "__main__":
     img_manager = AstroImgManager()
-    img_manager.fetch_image(180.468, -18.866)
+    img_manager.generate_image_set(50)
