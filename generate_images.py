@@ -5,12 +5,13 @@ data, perform image stacking, and further filtering.
 '''
 
 import cv2 as cv
+import glob
 import numpy as np
 import os
 import shutil
 
 from astropy.table import Table
-from empty_search import EmptySearch, NotEnoughExposures
+from custom_exceptions import EmptySearch, NotEnoughExposures
 from image_stacking.auto_stack import stackImagesECC
 from requests import get
 
@@ -51,21 +52,16 @@ class AstroImgManager:
 
                 try:
                     self.__fetch_image(ra, dec)
-                except cv.error:
-                    # Generate a new location if the search returns
-                    # exposures that result in an OpenCV error.
-                    ra, dec = generate_rand_loc()
-                    continue
                 except ConnectionError:
                     # Retry the same coordinate pair if the connection fails.
                     continue
-                except EmptySearch:
-                    # Generate a new location if the search returns empty.
-                    ra, dec = generate_rand_loc()
-                    continue
-                except NotEnoughExposures:
-                    # Generate a new location if the search doesn't contain
-                    # a suitable number of exposures.
+                except Exception:
+                    # Remove exposures from an in-progress image compilation.
+                    exposure_files = glob.glob(os.path.join(self.data_path,
+                                                            "exposure_*.jpeg"))
+                    os.remove(exposure_files)
+                    # Generate a new location if the search results in any
+                    # other exceptions and try again.
                     ra, dec = generate_rand_loc()
                     continue
 
