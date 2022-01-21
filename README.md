@@ -1,6 +1,6 @@
 # Celestial Object Classifier
 
-###### Noah Himed, Madison Belk
+###### Madison Belk, Noah Himed
 
 ### Project Summary
 
@@ -11,11 +11,19 @@ algorithm.
 
 ### Prerequistes
 
-This software package requires `astropy`, `numpy` and `scipy`. These can be
-installed using [pip](https://pip.pypa.io/en/stable/) as follows:
-```
-pip install requests
-pip install git+git://github.com/dfm/casjobs@master
-pip install git+git://github.com/rlwastro/mastcasjobs@master
-pip install fastkde
-```
+The `COC` software package requires the following modules:
+- [astropy](https://www.astropy.org/)
+- [numpy](https://numpy.org/)
+- [requests](https://docs.python-requests.org/en/latest/)
+
+### Image Pre-Processing
+
+`generate_images.py` downloads raw image data from the Hubble Legacy Archive,
+and performs the following steps to generate a suitable set of data to be
+labelled:
+1. Image stacking
+2. Histogram equalization
+3. Application of a bilateral filter
+
+Image stacking is done using a module from a repo forked from Mathias Sundholm's
+[image_stacking](https://github.com/maitek/image_stacking) implementation.

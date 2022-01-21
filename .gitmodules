@@ -1,0 +1,3 @@
+[submodule "image_stacking"]
+	path = image_stacking
+	url = git@github.com:noah8368/image_stacking.git
