@@ -27,6 +27,13 @@ class AstroImgManager:
             ra = round(np.random.uniform(0, 360), 3)
             dec = round(np.rad2deg(np.arcsin(np.random.uniform(-1, 1))), 3)
             return ra, dec
+        
+        def remove_exposures():
+            # Remove exposures from an in-progress image compilation.
+            exposure_files = glob.glob(os.path.join(self.data_path,
+                                                    "exposure_*.jpeg"))
+            for file in exposure_files:
+                os.remove(file)
 
         """Generates a set of processed images.
 
@@ -53,13 +60,13 @@ class AstroImgManager:
                 try:
                     self.__fetch_image(ra, dec)
                 except ConnectionError:
+                    remove_exposures()
+                    
                     # Retry the same coordinate pair if the connection fails.
                     continue
                 except Exception:
-                    # Remove exposures from an in-progress image compilation.
-                    exposure_files = glob.glob(os.path.join(self.data_path,
-                                                            "exposure_*.jpeg"))
-                    os.remove(exposure_files)
+                    remove_exposures()
+                    
                     # Generate a new location if the search results in any
                     # other exceptions and try again.
                     ra, dec = generate_rand_loc()
@@ -67,9 +74,32 @@ class AstroImgManager:
 
                 prev_locs.append((ra, dec))
                 break
+                
+        def __enhance_contrast(image_matrix, bins=256):
+            image_flattened = image_matrix.flatten()
+            image_hist = np.zeros(bins)
+
+            # frequency count of each pixel
+            for pix in image_matrix:
+                image_hist[pix] += 1
+
+            # cummulative sum
+            cum_sum = np.cumsum(image_hist)
+            norm = (cum_sum - cum_sum.min()) * 255
+            # normalization of the pixel values
+            n_ = cum_sum.max() - cum_sum.min()
+            uniform_norm = norm / n_
+            uniform_norm = uniform_norm.astype('int')
+
+            # flat histogram
+            image_eq = uniform_norm[image_flattened]
+            # reshaping the flattened matrix to its original shape
+            image_eq = np.reshape(a=image_eq, newshape=image_matrix.shape)
+
+            return image_eq
 
     def __fetch_image(self, ra, dec):
-        """Generates a set of processed images from the Hubble Legacy Archive.
+        """Generate a processed image from the Hubble Legacy Archive.
 
         Args:
             ra, dec: Right ascension and declination. Central position in deg
@@ -99,10 +129,10 @@ class AstroImgManager:
             else:
                 grouped_exposure_urls[exposure_loc] = [entry["URL"]]
 
-        # Select the image with the most exposures for stacking.
-        image_index = np.argmax([len(url_list) for url_list in
+        # Select the location with the most exposures for stacking.
+        loc_index = np.argmax([len(url_list) for url_list in
                                 list(grouped_exposure_urls.values())])
-        exposure_urls = list(grouped_exposure_urls.values())[image_index]
+        exposure_urls = list(grouped_exposure_urls.values())[loc_index]
         if len(exposure_urls) < MIN_NUM_EXPOSURES:
             raise NotEnoughExposures
 
@@ -119,16 +149,17 @@ class AstroImgManager:
 
         # Save the stacked image.
         combined_img = stackImagesECC(exposure_path_list)
-        ra, dec = list(grouped_exposure_urls.keys())[image_index]
+        ra, dec = list(grouped_exposure_urls.keys())[loc_index]
         img_name = os.path.join(self.data_path, str(ra) + "_" + str(dec)
                                 + ".jpeg")
-        cv.imwrite(img_name, combined_img)
 
         # Remove downloaded exposures once they've been combined.
         for exposure_f in exposure_path_list:
             os.remove(exposure_f)
 
-        # TODO (Madison): Perform further image filtering.
+        filtered_img = cv.bilateralFilter(combined_img, 5, 75, 75)
+        filtered_img = self.__enhance_contrast(filtered_img)
+        cv.imwrite(img_name, filtered_img)
 
     def __save_image(self, url, path):
         # Ensure the HTTPS reply's status code indicates success (OK status)
