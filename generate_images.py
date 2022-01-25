@@ -23,18 +23,6 @@ class AstroImgManager:
             os.mkdir(self.data_path)
 
     def generate_image_set(self, num_images):
-        def generate_rand_loc():
-            ra = round(np.random.uniform(0, 360), 3)
-            dec = round(np.rad2deg(np.arcsin(np.random.uniform(-1, 1))), 3)
-            return ra, dec
-        
-        def remove_exposures():
-            # Remove exposures from an in-progress image compilation.
-            exposure_files = glob.glob(os.path.join(self.data_path,
-                                                    "exposure_*.jpeg"))
-            for file in exposure_files:
-                os.remove(file)
-
         """Generates a set of processed images.
 
         Randomly generates a set of celestial coordinates and saves a single
@@ -45,6 +33,18 @@ class AstroImgManager:
         Args:
             num_images: Number of images in the data set.
         """
+
+        def generate_rand_loc():
+            ra = round(np.random.uniform(0, 360), 3)
+            dec = round(np.rad2deg(np.arcsin(np.random.uniform(-1, 1))), 3)
+            return ra, dec
+
+        def remove_exposures():
+            # Remove exposures from an in-progress image compilation.
+            exposure_files = glob.glob(os.path.join(self.data_path,
+                                                    "exposure_*.jpeg"))
+            for file in exposure_files:
+                os.remove(file)
 
         prev_locs = []
         for img_count in range(num_images):
@@ -61,12 +61,12 @@ class AstroImgManager:
                     self.__fetch_image(ra, dec)
                 except ConnectionError:
                     remove_exposures()
-                    
+
                     # Retry the same coordinate pair if the connection fails.
                     continue
-                except Exception:
+                except (cv.error, EmptySearch, NotEnoughExposures, ValueError):
                     remove_exposures()
-                    
+
                     # Generate a new location if the search results in any
                     # other exceptions and try again.
                     ra, dec = generate_rand_loc()
@@ -74,36 +74,36 @@ class AstroImgManager:
 
                 prev_locs.append((ra, dec))
                 break
-                
-        def __enhance_contrast(image_matrix, bins=256):
-            image_flattened = image_matrix.flatten()
-            image_hist = np.zeros(bins)
 
-            # frequency count of each pixel
-            for pix in image_matrix:
-                image_hist[pix] += 1
+    def __enhance_contrast(self, image_matrix, bins=256):
+        image_flattened = image_matrix.flatten()
+        image_hist = np.zeros(bins)
 
-            # cummulative sum
-            cum_sum = np.cumsum(image_hist)
-            norm = (cum_sum - cum_sum.min()) * 255
-            # normalization of the pixel values
-            n_ = cum_sum.max() - cum_sum.min()
-            uniform_norm = norm / n_
-            uniform_norm = uniform_norm.astype('int')
+        # frequency count of each pixel
+        for pix in image_matrix:
+            image_hist[pix] += 1
 
-            # flat histogram
-            image_eq = uniform_norm[image_flattened]
-            # reshaping the flattened matrix to its original shape
-            image_eq = np.reshape(a=image_eq, newshape=image_matrix.shape)
+        # cummulative sum
+        cum_sum = np.cumsum(image_hist)
+        norm = (cum_sum - cum_sum.min()) * 255
+        # normalization of the pixel values
+        n_ = cum_sum.max() - cum_sum.min()
+        uniform_norm = norm / n_
+        uniform_norm = uniform_norm.astype('int')
 
-            return image_eq
+        # flat histogram
+        image_eq = uniform_norm[image_flattened]
+        # reshaping the flattened matrix to its original shape
+        image_eq = np.reshape(a=image_eq, newshape=image_matrix.shape)
+
+        return image_eq
 
     def __fetch_image(self, ra, dec):
         """Generate a processed image from the Hubble Legacy Archive.
 
         Args:
             ra, dec: Right ascension and declination. Central position in deg
-                        for the cutout.
+                     for the cutout.
             radius: Radius of the cutout, in degrees.
         """
 
@@ -117,8 +117,8 @@ class AstroImgManager:
                 raise EmptySearch
         except ValueError:
             print("ERROR: Invalid query options")
-        print("Processing exposures at position", str(ra) + ", " + str(dec)
-              + "...")
+        print("\nProcessing exposures at RA: ", str(ra) + "° DEC: " + str(dec)
+              + "°\n")
 
         # Group exposures by right ascension and declination.
         grouped_exposure_urls = {}
@@ -131,7 +131,7 @@ class AstroImgManager:
 
         # Select the location with the most exposures for stacking.
         loc_index = np.argmax([len(url_list) for url_list in
-                                list(grouped_exposure_urls.values())])
+                               list(grouped_exposure_urls.values())])
         exposure_urls = list(grouped_exposure_urls.values())[loc_index]
         if len(exposure_urls) < MIN_NUM_EXPOSURES:
             raise NotEnoughExposures
@@ -147,11 +147,11 @@ class AstroImgManager:
             exposure_path_list.append(exposure_path)
             self.__save_image(exposure_url, exposure_path)
 
-        # Save the stacked image.
+        # Combine exposures for the chosen location into a single image.
         combined_img = stackImagesECC(exposure_path_list)
         ra, dec = list(grouped_exposure_urls.keys())[loc_index]
-        img_name = os.path.join(self.data_path, str(ra) + "_" + str(dec)
-                                + ".jpeg")
+        img_name = os.path.join(self.data_path, "RA_" + str(ra) + "__DEC_"
+                                + str(dec) + ".jpeg")
 
         # Remove downloaded exposures once they've been combined.
         for exposure_f in exposure_path_list:
@@ -174,9 +174,9 @@ class AstroImgManager:
         shutil.copyfileobj(req.raw, img_file)
         img_file.close()
 
-    def __query_hubble_legacy_archive(self, ra, dec, radius, data_product, inst,
-                                      spectral_elements=(), autoscale=99.5,
-                                      asinh=1, format="image/jpeg"):
+    def __query_hubble_legacy_archive(self, ra, dec, radius, data_product,
+                                      inst, spectral_elements=(),
+                                      autoscale=99.5, asinh=1):
         """Queries image data from the Hubble Legacy Archive.
 
         Args:
@@ -201,12 +201,13 @@ class AstroImgManager:
         if not isinstance(spectral_elements, str):
             spectral_elements = ",".join(spectral_elements)
 
+        # Fetch jpeg images only in query.
         archive_search_url = ("https://hla.stsci.edu/cgi-bin/hlaSIAP.cgi?"
                               + "POS={ra},{dec}"
                               + "&size={radius}"
                               + "&imagetype={data_product}"
                               + "&inst={inst}"
-                              + "&format={format}"
+                              + "&format=image/jpeg"
                               + "&autoscale={autoscale}"
                               + "&asinh={asinh}").format(**locals())
         if spectral_elements != "":
