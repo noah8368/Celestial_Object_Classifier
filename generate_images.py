@@ -12,29 +12,36 @@ import shutil
 
 from astropy.table import Table
 from custom_exceptions import EmptySearch, NotEnoughExposures
+from distutils.ccompiler import gen_lib_options
 from image_stacking.auto_stack import stackImagesECC
 from requests import get
+from urllib.error import URLError
 
 
 class AstroImgManager:
+    IMG_EXT = ".jpeg"
+
     def __init__(self):
         self.data_path = os.path.join(os.curdir, "images")
         if not os.path.exists(self.data_path):
             os.mkdir(self.data_path)
 
-    def generate_image_set(self, num_images):
+    def gen_img_set(self, num_images, process_manually=False):
         """Generates a set of processed images.
 
-        Randomly generates a set of celestial coordinates and saves a single
+        Randomly gens a set of celestial coordinates and saves a single
         processed image for each coordinate. If a connection error occurs
         during image processing for a given coordinate, formation of this image
         is skipped.
 
         Args:
             num_images: Number of images in the data set.
+            process_manually: If true, download exposures from the Hubble
+                              Legacy Archive and manually process them rather
+                              than pre-processed data.
         """
 
-        def generate_rand_loc():
+        def gen_rand_loc():
             ra = round(np.random.uniform(0, 360), 3)
             dec = round(np.rad2deg(np.arcsin(np.random.uniform(-1, 1))), 3)
             return ra, dec
@@ -42,64 +49,65 @@ class AstroImgManager:
         def remove_exposures():
             # Remove exposures from an in-progress image compilation.
             exposure_files = glob.glob(os.path.join(self.data_path,
-                                                    "exposure_*.jpeg"))
+                                                    "exposure_*"
+                                                    + self.IMG_EXT))
             for file in exposure_files:
                 os.remove(file)
 
         prev_locs = []
         for img_count in range(num_images):
-            ra, dec = generate_rand_loc()
+            ra, dec = gen_rand_loc()
 
             while True:
                 if (ra, dec) in prev_locs:
                     # Generate a new location if the current location has
                     # already been searched.
-                    ra, dec = generate_rand_loc()
+                    ra, dec = gen_rand_loc()
                     continue
 
                 try:
-                    self.__fetch_image(ra, dec)
-                except ConnectionError:
-                    remove_exposures()
+                    self.__fetch_img(ra, dec, process_manually)
+                except (ConnectionError, URLError):
+                    if process_manually:
+                        remove_exposures()
 
                     # Retry the same coordinate pair if the connection fails.
                     continue
                 except (cv.error, EmptySearch, NotEnoughExposures, ValueError):
-                    remove_exposures()
+                    if process_manually:
+                        remove_exposures()
 
                     # Generate a new location if the search results in any
                     # other exceptions and try again.
-                    ra, dec = generate_rand_loc()
+                    ra, dec = gen_rand_loc()
                     continue
 
                 prev_locs.append((ra, dec))
                 break
 
-    def __enhance_contrast(self, image_matrix, bins=256):
-        image_flattened = image_matrix.flatten()
-        image_hist = np.zeros(bins)
+    def __enhance_contrast(self, img_matrix, bins=256):
+        img_flattened = img_matrix.flatten()
+        img_hist = np.zeros(bins)
 
-        # frequency count of each pixel
-        for pix in image_matrix:
-            image_hist[pix] += 1
+        # Compute the frequency count of each pixel.
+        for pix in img_matrix:
+            img_hist[pix] += 1
 
-        # cummulative sum
-        cum_sum = np.cumsum(image_hist)
+        # Normalize the histogram.
+        cum_sum = np.cumsum(img_hist)
         norm = (cum_sum - cum_sum.min()) * 255
-        # normalization of the pixel values
         n_ = cum_sum.max() - cum_sum.min()
         uniform_norm = norm / n_
         uniform_norm = uniform_norm.astype('int')
 
-        # flat histogram
-        image_eq = uniform_norm[image_flattened]
-        # reshaping the flattened matrix to its original shape
-        image_eq = np.reshape(a=image_eq, newshape=image_matrix.shape)
+        img_eq = uniform_norm[img_flattened]
+        # Reshape the flattened matrix to its original shape.
+        img_eq = np.reshape(a=img_eq, newshape=img_matrix.shape)
 
-        return image_eq
+        return img_eq
 
-    def __fetch_image(self, ra, dec):
-        """Generate a processed image from the Hubble Legacy Archive.
+    def __fetch_img(self, ra, dec, processing_manually):
+        """Generates a processed image from the Hubble Legacy Archive.
 
         Args:
             ra, dec: Right ascension and declination. Central position in deg
@@ -110,58 +118,73 @@ class AstroImgManager:
         SEARCH_RADIUS = 0.4
         MIN_NUM_EXPOSURES = 5
         try:
-            img_table = self.__query_hubble_legacy_archive(ra, dec,
-                                                           SEARCH_RADIUS,
-                                                           "exposure", "WFC3")
+            if processing_manually:
+                img_table = self.__query_hubble_legacy_archive(ra, dec,
+                                                               SEARCH_RADIUS,
+                                                               "exposure",
+                                                               "WFC3")
+            else:
+                img_table = self.__query_hubble_legacy_archive(ra, dec,
+                                                               SEARCH_RADIUS,
+                                                               "combined",
+                                                               "WFC3")
             if len(img_table) == 0:
                 raise EmptySearch
         except ValueError:
             print("ERROR: Invalid query options")
-        print("\nProcessing exposures at RA: ", str(ra) + "° DEC: " + str(dec)
-              + "°\n")
+        print("\nProcessing data at location RA:", str(ra) + "° DEC:",
+              + str(dec) + "°\n")
 
-        # Group exposures by right ascension and declination.
-        grouped_exposure_urls = {}
+        # Group photos by right ascension and declination.
+        grouped_img_urls = {}
         for entry in img_table:
             exposure_loc = (entry["RA"], entry["DEC"])
-            if exposure_loc in grouped_exposure_urls:
-                grouped_exposure_urls[exposure_loc].append(entry["URL"])
+            if exposure_loc in grouped_img_urls:
+                grouped_img_urls[exposure_loc].append(entry["URL"])
             else:
-                grouped_exposure_urls[exposure_loc] = [entry["URL"]]
+                grouped_img_urls[exposure_loc] = [entry["URL"]]
 
-        # Select the location with the most exposures for stacking.
-        loc_index = np.argmax([len(url_list) for url_list in
-                               list(grouped_exposure_urls.values())])
-        exposure_urls = list(grouped_exposure_urls.values())[loc_index]
-        if len(exposure_urls) < MIN_NUM_EXPOSURES:
-            raise NotEnoughExposures
+        if processing_manually:
+            # Select the location with the most exposures for stacking.
+            loc_index = np.argmax([len(url_list) for url_list in
+                                   list(grouped_img_urls.values())])
+            exposure_urls = list(grouped_img_urls.values())[loc_index]
+            if len(exposure_urls) < MIN_NUM_EXPOSURES:
+                raise NotEnoughExposures
 
-        # Download exposures for each position.
-        exposure_count = 0
-        exposure_path_list = []
-        for exposure_url in exposure_urls:
-            exposure_count += 1
-            exposure_path = os.path.join(self.data_path,
-                                         "exposure_" + str(exposure_count)
-                                         + ".jpeg")
-            exposure_path_list.append(exposure_path)
-            self.__save_image(exposure_url, exposure_path)
+            # Download exposures for each position.
+            exposure_count = 0
+            exposure_path_list = []
+            for exposure_url in exposure_urls:
+                exposure_count += 1
+                exposure_path = os.path.join(self.data_path,
+                                             "exposure_" + str(exposure_count)
+                                             + self.IMG_EXT)
+                exposure_path_list.append(exposure_path)
+                self.__save_img(exposure_url, exposure_path)
 
-        # Combine exposures for the chosen location into a single image.
-        combined_img = stackImagesECC(exposure_path_list)
-        ra, dec = list(grouped_exposure_urls.keys())[loc_index]
-        img_name = os.path.join(self.data_path, "RA_" + str(ra) + "__DEC_"
-                                + str(dec) + ".jpeg")
+            # Combine exposures for the chosen location into a single image.
+            combined_img = stackImagesECC(exposure_path_list)
+            ra, dec = list(grouped_img_urls.keys())[loc_index]
+            img_path = os.path.join(self.data_path, "RA_" + str(ra) + "__DEC_"
+                                    + str(dec) + self.IMG_EXT)
 
-        # Remove downloaded exposures once they've been combined.
-        for exposure_f in exposure_path_list:
-            os.remove(exposure_f)
+            # Remove downloaded exposures once they've been combined.
+            for exposure_f in exposure_path_list:
+                os.remove(exposure_f)
 
-        filtered_img = cv.bilateralFilter(combined_img, 5, 75, 75)
-        filtered_img = self.__enhance_contrast(filtered_img)
-        cv.imwrite(img_name, filtered_img)
+            filtered_img = cv.bilateralFilter(combined_img, 5, 75, 75)
+            filtered_img = self.__enhance_contrast(filtered_img)
+            cv.imwrite(img_path, filtered_img)
+        else:
+            # Save the first image of the first location from the query.
+            ra, dec = list(grouped_img_urls.keys())[0]
+            img_url = list(grouped_img_urls.values())[0][0]
+            img_path = os.path.join(self.data_path, "RA_" + str(ra) + "__DEC_"
+                                    + str(dec) + self.IMG_EXT)
+            self.__save_img(img_url, img_path)
 
-    def __save_image(self, url, path):
+    def __save_img(self, url, path):
         # Ensure the HTTPS reply's status code indicates success (OK status)
         # before continuing.
         req = get(url, stream=True)
@@ -219,4 +242,4 @@ class AstroImgManager:
 
 if __name__ == "__main__":
     img_manager = AstroImgManager()
-    img_manager.generate_image_set(50)
+    img_manager.gen_img_set(50)
