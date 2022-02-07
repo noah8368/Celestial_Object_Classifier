@@ -90,6 +90,7 @@ class AstroImgManager:
                 break
 
     def __enhance_contrast(self, img_matrix, bins=256):
+        """Applies histogram equalization to improve image contrast."""
         img_flattened = img_matrix.flatten()
         img_hist = np.zeros(bins)
 
@@ -191,10 +192,15 @@ class AstroImgManager:
             self.__straighten_img(img_path)
 
     def __save_img(self, url, path):
-        # Ensure the HTTPS reply's status code indicates success (OK status)
-        # before continuing.
+        """Downloads the image from a given url.
+        
+        Args:
+            url: Location to download image from.
+            path: Location to save image to locally.
+        """
         req = get(url, stream=True)
         OK_STATUS = 200
+        # Ensure the HTTPS reply's status code indicates success (OK status).
         if req.status_code == OK_STATUS:
             req.raw.decode_content = True
         else:
@@ -204,9 +210,16 @@ class AstroImgManager:
         img_file.close()
 
     def __find_corners(self, image, comparator, pixel_value):
+        """Returns the location of the corners of an image.
+
+        image: numpy array containing pixel values.
+        comparator: TODO (Madison): Describe this function argument.
+        pixel_value: TODO (Madison): Describe this function argument.
+        """
         num_rows = np.shape(image)[0]
         num_cols = np.shape(image)[1]
 
+        # TODO (Madison): Give this variable a more descriptive name.
         flag = False
         # Find corner on top edge
         for i in range(num_rows):
@@ -220,6 +233,7 @@ class AstroImgManager:
 
         flag = False
         # Find corner on bottom edge
+        # TODO (Madison): Use more descriptive index names than "i" and "j".
         for i in reversed(range(num_rows)):
             for j in range(num_cols):
                 if comparator(image[i, j], pixel_value):
@@ -231,6 +245,8 @@ class AstroImgManager:
 
         flag = False
         # Find corner on left edge
+        # TODO (Madison): Whenever possible, use numpy functions and arrays
+        # rather than normal python lists in your code.
         for j in range(num_cols):
             for i in range(num_rows):
                 if comparator(image[i, j], pixel_value):
@@ -248,34 +264,57 @@ class AstroImgManager:
                     right_corner = (i, j, image[i, j])
                     flag = True
                     break
+            # TODO (Madison): A cleaner way of checking if "flag == True" is
+            # by simply writing "if flag".
             if flag == True:
                 break
+
+        """TODO (Madison): The preceding four for-loops may be combined into
+        a single loop to improve the efficiency of this code.
+        """
         
         return top_corner, bottom_corner, left_corner, right_corner
 
     def __straighten_img(self, img_path):
+        """Rotates images to ensure they're rectangular.
+        
+        Args:
+            img_path: Local path to image.
+        """
         image_src = cv.imread(img_path)
         image_data = cv.cvtColor(image_src, cv.COLOR_BGR2GRAY)
 
+        # TODO (Madison): Remove this. This is an unnecessary comment. What
+        # you're doing here is already clear by the function name. (1)
         # Find corners
+        # TODO (Madison): Lines shouldn't be over 80 characters long. (2)
         top_corner, bottom_corner, left_corner, right_corner = self.__find_corners(image_data, operator.lt, 255)
         
+        # TODO (Madison): Comments should end in a period. (3)
         # Find angle relative to x axis
+        # TODO (Madison): See (2).
         theta = math.tan((right_corner[0] - top_corner[0])/(right_corner[1] - top_corner[1]))
         theta = int(theta*180/np.pi)
         
+        # TODO (Madison): See (1) and (3).
         # Rotate image
         rotated = ndimage.rotate(image_data, 90-theta)
         
+        # TODO (Madison): See (1), (2) and (3).
         # Find corners
         top_corner_r, bottom_corner_r, left_corner_r, right_corner_r = self.__find_corners(rotated, operator.gt, 0)
         
+        # TODO (Madison): You can make this one line: "num_rows, num_cols = ..."
         num_rows = np.shape(rotated)[0]
         num_cols = np.shape(rotated)[1]
-            
+        
+        # TODO (Madison): Use more descriptive index names that "i" and "j".
         # Find top edge
         for i in range(top_corner_r[0], num_rows):
             j = top_corner_r[1]
+            # TODO (Madison): Avoid using "magic numbers". Save 255 to a
+            # descriptive variable name such as "WHITE_PX_VAL" (using all caps
+            # and underscores indicates this is a constant value).
             if rotated[i, j] < 255:
                 top_edge = (i, j, rotated[i, j])
                 break
@@ -302,6 +341,10 @@ class AstroImgManager:
                 break
           
         # Crop image
+        # TODO (Madison): Give this variable a name that desribes what the
+        # value it holds is, not what you've done to it. A good example might
+        # be "oriented_img" with a comment explaining that you're cropped the
+        # image in this line.
         rotated_cropped = rotated[top_edge[0]:bottom_edge[0], left_edge[1]:right_edge[1]]
         
         cv.imwrite(img_path, rotated_cropped)
