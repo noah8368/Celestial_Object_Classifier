@@ -54,6 +54,7 @@ class AstroImgManager:
             for file in exposure_files:
                 os.remove(file)
 
+        # Generate num_images images and save them in the "images" directory.
         prev_locs = []
         for img_count in range(num_images):
             ra, dec = gen_rand_loc()
@@ -133,7 +134,7 @@ class AstroImgManager:
         except ValueError:
             print("ERROR: Invalid query options")
         print("\nProcessing data at location RA:", str(ra) + "° DEC:",
-              + str(dec) + "°\n")
+              str(dec) + "°\n")
 
         # Group photos by right ascension and declination.
         grouped_img_urls = {}
@@ -162,6 +163,7 @@ class AstroImgManager:
                                              + self.IMG_EXT)
                 exposure_path_list.append(exposure_path)
                 self.__save_img(exposure_url, exposure_path)
+                self.__straighten_img(exposure_path)
 
             # Combine exposures for the chosen location into a single image.
             combined_img = stackImagesECC(exposure_path_list)
@@ -183,6 +185,7 @@ class AstroImgManager:
             img_path = os.path.join(self.data_path, "RA_" + str(ra) + "__DEC_"
                                     + str(dec) + self.IMG_EXT)
             self.__save_img(img_url, img_path)
+            self.__straighten_img(img_path)
 
     def __save_img(self, url, path):
         # Ensure the HTTPS reply's status code indicates success (OK status)
@@ -196,6 +199,14 @@ class AstroImgManager:
         img_file = open(path, "wb")
         shutil.copyfileobj(req.raw, img_file)
         img_file.close()
+
+    def __find_corners(self):
+        # TODO (Madison): Paste your code here.
+        pass
+
+    def __straighten_img(self, img_path):
+        # TODO (Madison): Paste your code here.
+        pass
 
     def __query_hubble_legacy_archive(self, ra, dec, radius, data_product,
                                       inst, spectral_elements=(),
@@ -242,4 +253,4 @@ class AstroImgManager:
 
 if __name__ == "__main__":
     img_manager = AstroImgManager()
-    img_manager.gen_img_set(50)
+    img_manager.gen_img_set(1, process_manually=True)
