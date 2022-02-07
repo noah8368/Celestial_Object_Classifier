@@ -6,7 +6,9 @@ data, perform image stacking, and further filtering.
 
 import cv2 as cv
 import glob
+import math
 import numpy as np
+import operator
 import os
 import shutil
 
@@ -15,6 +17,7 @@ from custom_exceptions import EmptySearch, NotEnoughExposures
 from distutils.ccompiler import gen_lib_options
 from image_stacking.auto_stack import stackImagesECC
 from requests import get
+from scipy import ndimage
 from urllib.error import URLError
 
 
@@ -200,13 +203,108 @@ class AstroImgManager:
         shutil.copyfileobj(req.raw, img_file)
         img_file.close()
 
-    def __find_corners(self):
-        # TODO (Madison): Paste your code here.
-        pass
+    def __find_corners(self, image, comparator, pixel_value):
+        num_rows = np.shape(image)[0]
+        num_cols = np.shape(image)[1]
+
+        flag = False
+        # Find corner on top edge
+        for i in range(num_rows):
+            for j in range(num_cols):
+                if comparator(image[i, j], pixel_value):
+                    top_corner = (i, j, image[i, j])
+                    flag = True
+                    break
+            if flag == True:
+                break
+
+        flag = False
+        # Find corner on bottom edge
+        for i in reversed(range(num_rows)):
+            for j in range(num_cols):
+                if comparator(image[i, j], pixel_value):
+                    bottom_corner = (i, j, image[i, j])
+                    flag = True
+                    break
+            if flag == True:
+                break
+
+        flag = False
+        # Find corner on left edge
+        for j in range(num_cols):
+            for i in range(num_rows):
+                if comparator(image[i, j], pixel_value):
+                    left_corner = (i, j, image[i, j])
+                    flag = True
+                    break
+            if flag == True:
+                break
+
+        flag = False
+        # Find corner on right edge
+        for j in reversed(range(num_cols)):
+            for i in range(num_rows):
+                if comparator(image[i, j], pixel_value):
+                    right_corner = (i, j, image[i, j])
+                    flag = True
+                    break
+            if flag == True:
+                break
+        
+        return top_corner, bottom_corner, left_corner, right_corner
 
     def __straighten_img(self, img_path):
-        # TODO (Madison): Paste your code here.
-        pass
+        image_src = cv.imread(img_path)
+        image_data = cv.cvtColor(image_src, cv.COLOR_BGR2GRAY)
+
+        # Find corners
+        top_corner, bottom_corner, left_corner, right_corner = self.__find_corners(image_data, operator.lt, 255)
+        
+        # Find angle relative to x axis
+        theta = math.tan((right_corner[0] - top_corner[0])/(right_corner[1] - top_corner[1]))
+        theta = int(theta*180/np.pi)
+        
+        # Rotate image
+        rotated = ndimage.rotate(image_data, 90-theta)
+        
+        # Find corners
+        top_corner_r, bottom_corner_r, left_corner_r, right_corner_r = self.__find_corners(rotated, operator.gt, 0)
+        
+        num_rows = np.shape(rotated)[0]
+        num_cols = np.shape(rotated)[1]
+            
+        # Find top edge
+        for i in range(top_corner_r[0], num_rows):
+            j = top_corner_r[1]
+            if rotated[i, j] < 255:
+                top_edge = (i, j, rotated[i, j])
+                break
+                    
+        # Find bottom edge
+        for i in range(bottom_corner_r[0], 0, -1):
+                j = bottom_corner_r[1]
+                if rotated[i, j] < 255:
+                    bottom_edge = (i, j, rotated[i, j])
+                    break
+
+        # Find left edge
+        for j in range(left_corner_r[1], num_cols):
+            i = left_corner_r[0]
+            if rotated[i, j] < 255:
+                left_edge = (i, j, rotated[i, j])
+                break
+
+        # Find right edge
+        for j in range(right_corner_r[1], 0, -1):
+            i = right_corner_r[0]
+            if rotated[i, j] < 255:
+                right_edge = (i, j, rotated[i, j])
+                break
+          
+        # Crop image
+        rotated_cropped = rotated[top_edge[0]:bottom_edge[0], left_edge[1]:right_edge[1]]
+        
+        cv.imwrite(img_path, rotated_cropped)
 
     def __query_hubble_legacy_archive(self, ra, dec, radius, data_product,
                                       inst, spectral_elements=(),
