@@ -193,7 +193,7 @@ class AstroImgManager:
 
     def __save_img(self, url, path):
         """Downloads the image from a given url.
-        
+
         Args:
             url: Location to download image from.
             path: Location to save image to locally.
@@ -224,7 +224,7 @@ class AstroImgManager:
         # Find corner on top edge
         for i in range(num_rows):
             for j in range(num_cols):
-                if comparator(image[i, j], pixel_value):
+                if comparator(image[i, j] < pixel_value):
                     top_corner = (i, j, image[i, j])
                     flag = True
                     break
@@ -277,7 +277,7 @@ class AstroImgManager:
 
     def __straighten_img(self, img_path):
         """Rotates images to ensure they're rectangular.
-        
+
         Args:
             img_path: Local path to image.
         """
@@ -289,25 +289,25 @@ class AstroImgManager:
         # Find corners
         # TODO (Madison): Lines shouldn't be over 80 characters long. (2)
         top_corner, bottom_corner, left_corner, right_corner = self.__find_corners(image_data, operator.lt, 255)
-        
+
         # TODO (Madison): Comments should end in a period. (3)
         # Find angle relative to x axis
         # TODO (Madison): See (2).
         theta = math.tan((right_corner[0] - top_corner[0])/(right_corner[1] - top_corner[1]))
         theta = int(theta*180/np.pi)
-        
+
         # TODO (Madison): See (1) and (3).
         # Rotate image
         rotated = ndimage.rotate(image_data, 90-theta)
-        
+
         # TODO (Madison): See (1), (2) and (3).
         # Find corners
         top_corner_r, bottom_corner_r, left_corner_r, right_corner_r = self.__find_corners(rotated, operator.gt, 0)
-        
+
         # TODO (Madison): You can make this one line: "num_rows, num_cols = ..."
         num_rows = np.shape(rotated)[0]
         num_cols = np.shape(rotated)[1]
-        
+
         # TODO (Madison): Use more descriptive index names that "i" and "j".
         # Find top edge
         for i in range(top_corner_r[0], num_rows):
@@ -318,7 +318,7 @@ class AstroImgManager:
             if rotated[i, j] < 255:
                 top_edge = (i, j, rotated[i, j])
                 break
-                    
+
         # Find bottom edge
         for i in range(bottom_corner_r[0], 0, -1):
                 j = bottom_corner_r[1]
@@ -339,14 +339,14 @@ class AstroImgManager:
             if rotated[i, j] < 255:
                 right_edge = (i, j, rotated[i, j])
                 break
-          
+
         # Crop image
         # TODO (Madison): Give this variable a name that desribes what the
         # value it holds is, not what you've done to it. A good example might
         # be "oriented_img" with a comment explaining that you're cropped the
         # image in this line.
         rotated_cropped = rotated[top_edge[0]:bottom_edge[0], left_edge[1]:right_edge[1]]
-        
+
         cv.imwrite(img_path, rotated_cropped)
 
     def __query_hubble_legacy_archive(self, ra, dec, radius, data_product,
