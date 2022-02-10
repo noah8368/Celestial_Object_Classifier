@@ -167,7 +167,11 @@ class AstroImgManager:
                                              + self.IMG_EXT)
                 exposure_path_list.append(exposure_path)
                 self.__save_img(exposure_url, exposure_path)
-                self.__straighten_img(exposure_path)
+                zoomed = self.__is_zoomed_in(exposure_path)
+                if zoomed:
+                    self.__straighten_zoomed_img(exposure_path)
+                else:
+                    self.__straighten_img(exposure_path)
 
             # Combine exposures for the chosen location into a single image.
             combined_img = stackImagesECC(exposure_path_list)
@@ -209,74 +213,99 @@ class AstroImgManager:
         shutil.copyfileobj(req.raw, img_file)
         img_file.close()
 
-    def __find_corners(self, image, comparator, pixel_value):
+    def __is_zoomed_in(self, img_path):
+        """Checks to see whether an image is zoomed in. Returns True/False.
+        
+        Args:
+        img_path: Local path to image.
+        """
+        WHITE_PX_VAL = 255
+        
+        image_src = cv.imread(img_path)
+        image_data = cv.cvtColor(image_src, cv.COLOR_BGR2GRAY)
+        
+        num_rows = np.shape(image_data)[0]
+        num_cols = np.shape(image_data)[1]
+
+        zoomed_in = False
+        first_point_row_idx = None
+        second_point_row_idx = None
+
+        for row_idx in range(num_rows):
+            if image_data[row_idx, 0] < WHITE_PX_VAL:
+                first_point_row_idx = row_idx
+                break
+
+        for row_idx in reversed(range(num_rows)):
+            if image_data[row_idx, 0] < WHITE_PX_VAL:
+                second_point_row_idx = row_idx
+                break
+
+        if (first_point_row_idx != second_point_row_idx) and
+            (first_point_row_idx != None) and (second_point_row_idx != None):
+            zoomed_in = True
+
+        return zoomed_in
+    
+    def __find_corners(self, image, greater_or_less_than, pixel_value):
         """Returns the location of the corners of an image.
 
         image: numpy array containing pixel values.
-        comparator: TODO (Madison): Describe this function argument.
-        pixel_value: TODO (Madison): Describe this function argument.
+        greater_or_less_than: either operator.lt or operator.gt depending on
+        whether we want to use < or >.
+        pixel_value: either 255 or 0.
         """
         num_rows = np.shape(image)[0]
         num_cols = np.shape(image)[1]
 
-        # TODO (Madison): Give this variable a more descriptive name.
-        flag = False
-        # Find corner on top edge
-        for i in range(num_rows):
-            for j in range(num_cols):
-                if comparator(image[i, j], pixel_value):
-                    top_corner = (i, j, image[i, j])
-                    flag = True
+        corner_assigned = False
+        # Find corner on top edge.
+        for row_idx in range(num_rows):
+            for col_idx in range(num_cols):
+                if greater_or_less_than(image[row_idx, col_idx], pixel_value):
+                    top_corner = (row_idx, col_idx, image[row_idx, col_idx])
+                    corner_assigned = True
                     break
-            if flag == True:
+            if corner_assigned:
                 break
 
-        flag = False
-        # Find corner on bottom edge
-        # TODO (Madison): Use more descriptive index names than "i" and "j".
-        for i in reversed(range(num_rows)):
-            for j in range(num_cols):
-                if comparator(image[i, j], pixel_value):
-                    bottom_corner = (i, j, image[i, j])
-                    flag = True
+        corner_assigned = False
+        # Find corner on bottom edge.
+        for row_idx in reversed(range(num_rows)):
+            for col_idx in range(num_cols):
+                if greater_or_less_than(image[row_idx, col_idx], pixel_value):
+                    bottom_corner = (row_idx, col_idx, image[row_idx, col_idx])
+                    corner_assigned = True
                     break
-            if flag == True:
+            if corner_assigned:
                 break
 
-        flag = False
-        # Find corner on left edge
-        # TODO (Madison): Whenever possible, use numpy functions and arrays
-        # rather than normal python lists in your code.
-        for j in range(num_cols):
-            for i in range(num_rows):
-                if comparator(image[i, j], pixel_value):
-                    left_corner = (i, j, image[i, j])
-                    flag = True
+        corner_assigned = False
+        # Find corner on left edge.
+        for col_idx in range(num_cols):
+            for row_idx in range(num_rows):
+                if greater_or_less_than(image[row_idx, col_idx], pixel_value):
+                    left_corner = (row_idx, col_idx, image[row_idx, col_idx])
+                    corner_assigned = True
                     break
-            if flag == True:
+            if corner_assigned:
                 break
 
-        flag = False
-        # Find corner on right edge
-        for j in reversed(range(num_cols)):
-            for i in range(num_rows):
-                if comparator(image[i, j], pixel_value):
-                    right_corner = (i, j, image[i, j])
-                    flag = True
+        corner_assigned = False
+        # Find corner on right edge.
+        for col_idx in reversed(range(num_cols)):
+            for row_idx in range(num_rows):
+                if greater_or_less_than(image[row_idx, col_idx], pixel_value):
+                    right_corner = (row_idx, col_idx, image[row_idx, col_idx])
+                    corner_assigned = True
                     break
-            # TODO (Madison): A cleaner way of checking if "flag == True" is
-            # by simply writing "if flag".
-            if flag == True:
+            if corner_assigned:
                 break
-
-        """TODO (Madison): The preceding four for-loops may be combined into
-        a single loop to improve the efficiency of this code.
-        """
         
         return top_corner, bottom_corner, left_corner, right_corner
 
     def __straighten_img(self, img_path):
-        """Rotates images to ensure they're rectangular.
+        """Rotates and crops images to ensure they're rectangular.
         
         Args:
             img_path: Local path to image.
@@ -284,71 +313,166 @@ class AstroImgManager:
         image_src = cv.imread(img_path)
         image_data = cv.cvtColor(image_src, cv.COLOR_BGR2GRAY)
 
-        # TODO (Madison): Remove this. This is an unnecessary comment. What
-        # you're doing here is already clear by the function name. (1)
-        # Find corners
         # TODO (Madison): Lines shouldn't be over 80 characters long. (2)
-        top_corner, bottom_corner, left_corner, right_corner = self.__find_corners(image_data, operator.lt, 255)
+        WHITE_PX_VAL = 255
+        top_corner, bottom_corner, left_corner, right_corner =
+            self.__find_corners(image_data, operator.lt, WHITE_PX_VAL)
         
-        # TODO (Madison): Comments should end in a period. (3)
-        # Find angle relative to x axis
+        # Find angle relative to x axis.
         # TODO (Madison): See (2).
-        theta = math.tan((right_corner[0] - top_corner[0])/(right_corner[1] - top_corner[1]))
+        theta = math.tan((right_corner[0] - top_corner[0])/(right_corner[1]
+            - top_corner[1]))
         theta = int(theta*180/np.pi)
         
-        # TODO (Madison): See (1) and (3).
-        # Rotate image
+        # Rotate image by angle theta.
         rotated = ndimage.rotate(image_data, 90-theta)
         
-        # TODO (Madison): See (1), (2) and (3).
-        # Find corners
-        top_corner_r, bottom_corner_r, left_corner_r, right_corner_r = self.__find_corners(rotated, operator.gt, 0)
+        BLACK_PX_VAL = 0
+        top_corner_r, bottom_corner_r, left_corner_r, right_corner_r =
+            self.__find_corners(rotated, operator.gt, BLACK_PX_VAL)
         
-        # TODO (Madison): You can make this one line: "num_rows, num_cols = ..."
-        num_rows = np.shape(rotated)[0]
-        num_cols = np.shape(rotated)[1]
+        num_rows, num_cols = np.shape(rotated)[0], np.shape(rotated)[1]
         
-        # TODO (Madison): Use more descriptive index names that "i" and "j".
-        # Find top edge
-        for i in range(top_corner_r[0], num_rows):
-            j = top_corner_r[1]
-            # TODO (Madison): Avoid using "magic numbers". Save 255 to a
-            # descriptive variable name such as "WHITE_PX_VAL" (using all caps
-            # and underscores indicates this is a constant value).
-            if rotated[i, j] < 255:
-                top_edge = (i, j, rotated[i, j])
+        # Find top edge.
+        for top_r_idx in range(top_corner_r[0], num_rows):
+            top_c_idx = top_corner_r[1]
+
+            if rotated[top_r_idx, top_c_idx] < WHITE_PX_VAL:
+                top_edge = (top_r_idx, top_c_idx, rotated[top_r_idx,
+                    top_c_idx])
                 break
                     
-        # Find bottom edge
-        for i in range(bottom_corner_r[0], 0, -1):
-                j = bottom_corner_r[1]
-                if rotated[i, j] < 255:
-                    bottom_edge = (i, j, rotated[i, j])
+        # Find bottom edge.
+        for bottom_r_idx in range(bottom_corner_r[0], 0, -1):
+                bottom_c_idx = bottom_corner_r[1]
+                if rotated[bottom_r_idx, bottom_c_idx] < WHITE_PX_VAL:
+                    bottom_edge = (bottom_r_idx, bottom_c_idx,
+                        rotated[bottom_r_idx, bottom_c_idx])
                     break
 
-        # Find left edge
-        for j in range(left_corner_r[1], num_cols):
-            i = left_corner_r[0]
-            if rotated[i, j] < 255:
-                left_edge = (i, j, rotated[i, j])
+        # Find left edge.
+        for left_c_idx in range(left_corner_r[1], num_cols):
+            left_r_idx = left_corner_r[0]
+            if rotated[left_r_idx, left_c_idx] < WHITE_PX_VAL:
+                left_edge = (left_r_idx, left_c_idx,
+                    rotated[left_r_idx, left_c_idx])
                 break
 
-        # Find right edge
-        for j in range(right_corner_r[1], 0, -1):
-            i = right_corner_r[0]
-            if rotated[i, j] < 255:
-                right_edge = (i, j, rotated[i, j])
+        # Find right edge.
+        for right_c_idx in range(right_corner_r[1], 0, -1):
+            right_r_idx = right_corner_r[0]
+            if rotated[right_r_idx, right_c_idx] < WHITE_PX_VAL:
+                right_edge = (right_r_idx, right_c_idx,
+                    rotated[right_r_idx, right_c_idx])
                 break
           
-        # Crop image
-        # TODO (Madison): Give this variable a name that desribes what the
-        # value it holds is, not what you've done to it. A good example might
-        # be "oriented_img" with a comment explaining that you're cropped the
-        # image in this line.
-        rotated_cropped = rotated[top_edge[0]:bottom_edge[0], left_edge[1]:right_edge[1]]
+        #Crop image.
+        oriented_img = rotated[top_edge[0]:bottom_edge[0],
+            left_edge[1]:right_edge[1]]
         
-        cv.imwrite(img_path, rotated_cropped)
+        cv.imwrite(img_path, oriented_img)
+        
+    def __straighten_zoomed_img(self, img_path):
+        """Crops zoomed images to ensure they're rectangular.
+        
+        Args:
+            img_path: Local path to image.
+        """
+        WHITE_PX_VAL = 255
+        
+        image_src = cv.imread(img_path)
+        image_data = cv.cvtColor(image_src, cv.COLOR_BGR2GRAY)
+        
+        num_rows = np.shape(image_data)[0]
+        num_cols = np.shape(image_data)[1]
+        
+        corner_assigned = False
+        for row_idx in range(num_rows):
+            for col_idx in range(num_cols):
+                if image_data[row_idx, col_idx] < WHITE_PX_VAL:
+                    left_upper = (row_idx, col_idx,
+                        image_data[row_idx, col_idx])
+                    corner_assigned = True
+                    break
+                else:
+                    row_idx = row_idx + 1
+                    col_idx = col_idx + 1
+            if corner_assigned:
+                break
 
+        corner_assigned = False
+        for row_idx in range(num_rows):
+            for col_idx in reversed(range(num_cols)):
+                if image_data[row_idx, col_idx] < WHITE_PX_VAL:
+                    right_upper = (row_idx, col_idx,
+                        image_data[row_idx, col_idx])
+                    corner_assigned = True
+                    break
+                else:
+                    row_idx = row_idx + 1
+                    col_idx = col_idx - 1
+            if corner_assigned:
+                break
+
+        corner_assigned = False
+        for row_idx in reversed(range(num_rows)):
+            for col_idx in range(num_cols):
+                if image_data[row_idx, col_idx] < WHITE_PX_VAL:
+                    left_lower = (row_idx, col_idx,
+                        image_data[row_idx, col_idx])
+                    corner_assigned = True
+                    break
+                else:
+                    row_idx = row_idx - 1
+                    col_idx = col_idx + 1
+            if corner_assigned:
+                break
+
+        corner_assigned = False
+        for row_idx in reversed(range(num_rows)):
+            for col_idx in reversed(range(num_cols)):
+                if image_data[row_idx, col_idx] < WHITE_PX_VAL:
+                    right_lower = (row_idx, col_idx,
+                        image_data[row_idx, col_idx])
+                    corner_assigned = True
+                    break
+                else:
+                    row_idx = row_idx - 1
+                    col_idx = col_idx - 1
+            if corner_assigned:
+                break
+        
+        #Find top value.
+        if left_upper[0] > right_upper[0]:
+            top_value = left_upper
+        else:
+            top_value = right_upper
+
+        #Find bottom value.
+        if left_lower[0] < right_lower[0]:
+            bottom_value = left_lower
+        else:
+            bottom_value = right_lower
+
+        #Find left value.
+        if left_upper[1] > left_lower[1]:
+            left_value = left_upper
+        else:
+            left_value = left_lower
+
+        #Find right value.
+        if right_upper[1] < right_lower[1]:
+            right_value = right_upper
+        else:
+            right_value = right_lower
+            
+            
+        #Crop image.
+        oriented_zoomed_img = image_data[top_value[0]:bottom_value[0],
+            left_value[1]:right_value[1]]
+        
+        cv.imwrite(img_path, oriented_zoomed_img)
+        
     def __query_hubble_legacy_archive(self, ra, dec, radius, data_product,
                                       inst, spectral_elements=(),
                                       autoscale=99.5, asinh=1):
