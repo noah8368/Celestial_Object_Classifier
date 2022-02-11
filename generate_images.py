@@ -305,21 +305,19 @@ class AstroImgManager:
         return top_corner, bottom_corner, left_corner, right_corner
 
     def __straighten_img(self, img_path):
+
         """Rotates and crops images to ensure they're rectangular.
-        
         Args:
             img_path: Local path to image.
         """
         image_src = cv.imread(img_path)
         image_data = cv.cvtColor(image_src, cv.COLOR_BGR2GRAY)
 
-        # TODO (Madison): Lines shouldn't be over 80 characters long. (2)
         WHITE_PX_VAL = 255
         top_corner, bottom_corner, left_corner, right_corner =
             self.__find_corners(image_data, operator.lt, WHITE_PX_VAL)
         
         # Find angle relative to x axis.
-        # TODO (Madison): See (2).
         theta = math.tan((right_corner[0] - top_corner[0])/(right_corner[1]
             - top_corner[1]))
         theta = int(theta*180/np.pi)
