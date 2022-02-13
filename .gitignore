@@ -4,3 +4,4 @@ __pycache__
 .ipynb_checkpoints
 # Ignore dataset files.
 images
+datasets

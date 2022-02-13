@@ -9,27 +9,27 @@ import glob
 import numpy as np
 import os
 import pandas as pd
+import requests
 import shutil
 
 from astropy.table import Table
 from custom_exceptions import EmptySearch, NotEnoughExposures
 from image_stacking.auto_stack import stackImagesECC
-from requests import get
 from socket import timeout
 from urllib.error import URLError
 
 IMG_EXT = ".jpeg"
 
 
-def gen_img_set(img_path, galaxy_f, nebula_f, process_manually=False):
+def gen_img_set(img_path, coord_fs=None, process_manually=False):
     """Downloads an processed image for each galaxy and nebula location.
 
     Probes the Hubble Legacy Archive for images of galaxies and nebulae.
 
     Args:
         img_path: Location to locally save image path.
-        galaxy_f: Path to a text file with celestial coordinates of galaxies.
-        nebula_f: Path to a text file with celestial coordinates of nebulae.
+        coord_fs: Tuples of paths to a text file with celestial coordinates of
+                  Celestial Objects of Interest.
         process_manually: If true, download exposures from the Hubble
                           Legacy Archive and manually process them rather
                           than pre-processed data.
@@ -42,24 +42,59 @@ def gen_img_set(img_path, galaxy_f, nebula_f, process_manually=False):
         for file in exposure_files:
             os.remove(file)
 
-    # Fetch images for location in coords_f and save them in "./images".
-    nebulae_coords = []  # __fetch_coords(nebula_f)
-    galaxy_coords = __fetch_coords(galaxy_f)
-    coords = nebulae_coords + galaxy_coords
-    for ra, dec in coords:
-        while True:
-            try:
-                __fetch_img(ra, dec, img_path, process_manually)
-            except (ConnectionError, URLError, timeout):
-                if process_manually:
-                    remove_exposures()
+    if coord_fs:
+        # Fetch images for given coordinates in coord_fs and save them locally.
+        coords = []
+        for f in coord_fs:
+            coords += __fetch_coords(f)
+        for ra, dec in coords:
+            while True:
+                try:
+                    __fetch_img(ra, dec, img_path, process_manually)
+                except (ConnectionError, URLError, timeout,
+                        requests.exceptions.ConnectionError):
+                    if process_manually:
+                        remove_exposures()
 
-                # Retry the same coordinate pair if the connection fails.
-                continue
-            except (cv.error, EmptySearch, NotEnoughExposures, ValueError):
-                if process_manually:
-                    remove_exposures()
-            break
+                    # Retry the same coordinate pair if the connection fails.
+                    continue
+                except (cv.error, EmptySearch, NotEnoughExposures, ValueError):
+                    if process_manually:
+                        remove_exposures()
+                break
+    else:
+        # Download all high quality images in the Hubble Legacy Archive.
+        __all_sky_search("HLSP", img_path)
+
+
+def __all_sky_search(img_type, data_path):
+    """Downloads an image for each location returned from an all-sky search.
+
+    Args:
+        img_type: Type of image to retrieve. Options are "best",
+                  "exposure", "combined", "mosaic", "color", "HLSP",
+                  and "all".
+    """
+    all_sky_img_table = __query_hubble_legacy_archive(ra=0, dec=0, radius=180,
+                                                      data_product=img_type,
+                                                      inst="WFC3")
+
+    # Group photos by right ascension and declination.
+    grouped_img_urls = {}
+    for entry in all_sky_img_table:
+        img_coords = (entry["RA"], entry["DEC"])
+        if img_coords in grouped_img_urls:
+            grouped_img_urls[img_coords].append(entry["URL"])
+        else:
+            grouped_img_urls[img_coords] = [entry["URL"]]
+
+    num_imgs = len(grouped_img_urls)
+    for img_urls, img_idx in zip(grouped_img_urls.values(), range(num_imgs)):
+        # Save the first image for each coordinate.
+        img_url = img_urls[0]
+        img_path = os.path.join(data_path, "%d%s" % (img_idx, IMG_EXT))
+        print("Saving image %s of %s..." % (img_idx + 1, num_imgs))
+        __save_img(img_url, img_path)
 
 
 def __fetch_coords(coords_f):
@@ -217,7 +252,7 @@ def __save_img(url, path):
         url: Location to download image from.
         path: Location to save image to locally.
     """
-    req = get(url, stream=True)
+    req = requests.get(url, stream=True)
     OK_STATUS = 200
     # Ensure the HTTPS reply's status code indicates success (OK status).
     if req.status_code == OK_STATUS:
@@ -242,7 +277,7 @@ def __query_hubble_legacy_archive(ra, dec, radius, data_product,
                         "exposure", "combined", "mosaic", "color", "HLSP",
                         and "all".
         inst: Instrument to collect data from on Hubble Space Telescope
-        format: Queried data file format.
+        format: Queried data file formats.
         spectral elements: A tuple of strings of filter color identifiers.
         autoscale: Percentage of image histogram to retain.
         asinh: If nonzero value, use Lupton asinh contrast algorithm.
@@ -256,17 +291,32 @@ def __query_hubble_legacy_archive(ra, dec, radius, data_product,
     if not isinstance(spectral_elements, str):
         spectral_elements = ",".join(spectral_elements)
 
-    # Fetch jpeg images only in query.
-    archive_search_url = ("https://hla.stsci.edu/cgi-bin/hlaSIAP.cgi?"
-                          + "POS={ra},{dec}"
-                          + "&size={radius}"
-                          + "&imagetype={data_product}"
-                          + "&inst={inst}"
-                          + "&format=image/jpeg"
-                          + "&autoscale={autoscale}"
-                          + "&asinh={asinh}").format(**locals())
-    if spectral_elements != "":
-        archive_search_url += "&spectral_elt={spectral_elements}".format(
-            **locals()
-        )
+    if ra == 0 and dec == 0 and radius == 180:
+        # Perform an all-sky search.
+        archive_search_url = ("https://hla.stsci.edu/cgi-bin/hlaSIAP.cgi?"
+                              + "POS=0,0"
+                              + "&size=180"
+                              + "&imagetype={data_product}"
+                              + "&inst={inst}"
+                              + "&format=image/jpeg"
+                              + "&autoscale={autoscale}"
+                              + "&asinh={asinh}").format(**locals())
+        if spectral_elements != "":
+            archive_search_url += "&spectral_elt={spectral_elements}".format(
+                **locals()
+            )
+    else:
+        # Fetch jpeg images only in query.
+        archive_search_url = ("https://hla.stsci.edu/cgi-bin/hlaSIAP.cgi?"
+                              + "POS={ra},{dec}"
+                              + "&size={radius}"
+                              + "&imagetype={data_product}"
+                              + "&inst={inst}"
+                              + "&format=image/jpeg"
+                              + "&autoscale={autoscale}"
+                              + "&asinh={asinh}").format(**locals())
+        if spectral_elements != "":
+            archive_search_url += "&spectral_elt={spectral_elements}".format(
+                **locals()
+            )
     return Table.read(archive_search_url, format="votable")
