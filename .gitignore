@@ -1,4 +1,6 @@
 __pycache__
-images
+# Ignore automatically added files.
 .DS_Store
 .ipynb_checkpoints
+# Ignore dataset files.
+images
