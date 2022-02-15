@@ -94,7 +94,14 @@ def __all_sky_search(img_type, data_path):
         img_url = img_urls[0]
         img_path = os.path.join(data_path, "%d%s" % (img_idx, IMG_EXT))
         print("Saving image %s of %s..." % (img_idx + 1, num_imgs))
-        __save_img(img_url, img_path)
+        while True:
+            try:
+                __save_img(img_url, img_path)
+            except (ConnectionError, URLError, timeout,
+                    requests.exceptions.ConnectionError):
+                # Retry the same download if the connection fails.
+                continue
+            break
 
 
 def __fetch_coords(coords_f):

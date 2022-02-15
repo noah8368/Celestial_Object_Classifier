@@ -32,12 +32,12 @@ def create_datasets(coord_fs=None, train_portion=0.7,
     img_path = os.path.join(os.curdir, "images")
     # Delete the folder "./images" if it exists to avoid mixing
     # datasets and non-image files into the current set of data.
-    if os.path.exists(img_path):
+    """if os.path.exists(img_path):
         shutil.rmtree(img_path)
-    os.mkdir(img_path)
+    os.mkdir(img_path)"""
 
     # Fetch data from the Hubble Legacy Archive.
-    gen_img_set(img_path, coord_fs, process_manually=True)
+    # gen_img_set(img_path, coord_fs, process_manually=True)
     imgs = glob.glob(os.path.join(img_path, "*%s" % IMG_EXT))
     random.shuffle(imgs)
     num_samples = len(imgs)
