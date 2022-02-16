@@ -10,7 +10,7 @@ in the resulting images.
 
 Data is drawn from the Hubble Legacy Archive and processed locally before
 object detection is performed (with an option to fetch pre-processed data
-available) by a CNN running on the [STM32 H743ZI](https://www.st.com/en/microcontrollers-microprocessors/stm32h743zi.html) board.
+available) by a CNN running on an [STM32 H743ZI](https://www.st.com/en/microcontrollers-microprocessors/stm32h743zi.html) board.
 
 ### Prerequistes
 
@@ -45,4 +45,6 @@ Image stacking is done using a module from a repo forked from Mathias Sundholm's
 
 ### Object Detection
 
-For object detection, [ppog's implementation of the YOLOv5-Lite](https://github.com/ppogg/YOLOv5-Lite) is used.
+For object detection, [ppog's implementation of YOLOv5-Lite](https://github.com/ppogg/YOLOv5-Lite) is used. The
+dataset used to train our network consists of 1156 images split across testing,
+validation, and training subsets that can be accessed [here](https://drive.google.com/drive/folders/14_X-lVrrFZzI7jWub8lkf_O5h90eb0ur?usp=sharing).
