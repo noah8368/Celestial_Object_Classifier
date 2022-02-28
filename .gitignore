@@ -3,5 +3,6 @@ __pycache__
 .DS_Store
 .ipynb_checkpoints
 # Ignore dataset files.
-images
-datasets
+dataset
+partial_dataset
+coco128
