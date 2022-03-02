@@ -7,7 +7,7 @@
 The Celestial Object Classifer (COC) is a complete galaxy object detection
 package. The software defines an API capable of
 - fetching/processing data from the [Hubble Legacy Archive (HLA)](https://hla.stsci.edu/hlaview.html)
-- running real-time galaxy object detection on a SoC
+- running real-time galaxy object detection on a Raspberry Pi
 
 ### Prerequistes
 
@@ -52,8 +52,8 @@ implementation.
 
 ### Galaxy Object Detection 
 
-Object detection is performed by a neural network with the YOLO architecture
-implemented on a SoC.
+Object detection is performed by a neural network with the YOLOv5 architecture
+implemented on a Raspberry Pi.
 
 #### Training Data
 
@@ -74,4 +74,8 @@ both of these tasks manually can be tedious and error prone, the script
 
 #### Model Architecture
 
-For object detection, [ppog's implementation of YOLOv5-Lite](https://github.com/ppogg/YOLOv5-Lite) is used.
+For object detection, the original [YOLOv5](https://github.com/ultralytics/yolov5) network is used. After some
+experimentation, it was determined that the `YOLOv5m6` architecture provided
+the best mix of accuracy and speed necessary for deployment on a Raspberry Pi.
+
+Our model weights (69.7 Mb) may be downloaded [here](https://drive.google.com/file/d/1Gmj9bqpRxm3hojGtDoqTGFhuPsL1Bqjj/view?usp=sharing).
