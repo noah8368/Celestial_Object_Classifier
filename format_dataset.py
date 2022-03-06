@@ -4,7 +4,7 @@ no files exist in the dataset without a corresponding label.
 
 import os
 
-DATASET_ROOT_DIR = os.path.join(os.curdir, "partial_dataset")
+DATASET_ROOT_DIR = os.path.join(os.curdir, "dataset")
 
 LABEL_DIR = os.path.join(DATASET_ROOT_DIR, "labels")
 DATA_DIR = os.path.join(DATASET_ROOT_DIR, "images")

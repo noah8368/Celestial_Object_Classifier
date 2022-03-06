@@ -63,8 +63,8 @@ sorts the images into a 70-20-10 split of training, validation, and testing
 data.
 
 After running this, our team was able to generate a custom labeled dataset of
-1156 images with ~2000 labelled galaxies. The [LabelImg](https://pypi.org/project/labelImg/) package was used to
-label our data. This dataset may be accessed [here](https://drive.google.com/drive/folders/14_X-lVrrFZzI7jWub8lkf_O5h90eb0ur?usp=sharing).
+224 images with 3,962 labelled examples. The [LabelImg](https://pypi.org/project/labelImg/) package was used to
+label our data. This dataset may be accessed [here](https://drive.google.com/drive/folders/1DwQdLUHBD_u9jVjQ59cls07F_etIBqu6?usp=sharing).
 
 After labeling, it is usually the case that there a sizeable number of images
 without labelable galaxies in them. Additionally, it is beneficial for each
@@ -78,4 +78,21 @@ For object detection, the original [YOLOv5](https://github.com/ultralytics/yolov
 experimentation, it was determined that the `YOLOv5m6` architecture provided
 the best mix of accuracy and speed necessary for deployment on a Raspberry Pi.
 
-Our model weights (69.7 Mb) may be downloaded [here](https://drive.google.com/file/d/1Gmj9bqpRxm3hojGtDoqTGFhuPsL1Bqjj/view?usp=sharing).
+Our model weights (67.9 Mb) may be downloaded [here](https://drive.google.com/file/d/1eE6ohDqo3WekTg44ltv4GGH2mYsNT4DH/view?usp=sharing).
+
+#### Performance
+
+Our model acheived a performance of **0.353 mAP** on the test set. Figures detailing
+other aspects of model performance can be viewed below.
+
+![Confusion Matrix](./figs/confusion_matrix.png "Confusion Matrix")
+
+![F1 Curve](./figs/F1_curve.png "F1 Curve")
+
+![Precision Curve](./figs/P_curve.png "Precision Curve")
+
+![Precision Recall Curve](./figs/PR_curve.png "Precision Recall Curve")
+
+![Recall Curve](./figs/R_curve.png "Recall Curve")
+
+![Sample Predictions](./figs/val_batch0_pred.jpg "Sample Predictions")

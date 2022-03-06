@@ -4,5 +4,4 @@ __pycache__
 .ipynb_checkpoints
 # Ignore dataset files.
 dataset
-partial_dataset
 coco128
