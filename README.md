@@ -5,9 +5,8 @@
 ### Project Summary
 
 The Celestial Object Classifer (COC) is a complete galaxy object detection
-package. The software defines an API capable of
-- fetching/processing data from the [Hubble Legacy Archive (HLA)](https://hla.stsci.edu/hlaview.html)
-- running real-time galaxy object detection on a Raspberry Pi
+package which include both an API capable of fetching/processing data from the
+[Hubble Legacy Archive (HLA)](https://hla.stsci.edu/hlaview.html) and scripts to run real-time galaxy object detection on a Raspberry Pi.
 
 ### Prerequistes
 
@@ -32,6 +31,9 @@ fetches image data from the HLA with the following definition and options:
 ```
 gen_img_set(img_path, coord_fs=None, process_manually=False)
 ```
+`img_path`: A file path to the desired location to save the generated image set
+            locally.
+
 `coord_fs`: An iterable object of paths to `*.tsv` files containing celestial
             coordinates of images to be downloaded from the HLA. In each of
             these files, there must be two columns named `RA` and `DEC` with
@@ -79,20 +81,41 @@ experimentation, it was determined that the `YOLOv5m6` architecture provided
 the best mix of accuracy and speed necessary for deployment on a Raspberry Pi.
 
 Our model weights (67.9 Mb) may be downloaded [here](https://drive.google.com/file/d/1eE6ohDqo3WekTg44ltv4GGH2mYsNT4DH/view?usp=sharing).
+```
+Model Summary: 378 layers, 35248920 parameters, 0 gradients, 49.0 GFLOPs
+```
 
 #### Performance
 
-Our model acheived a performance of **0.353 mAP** on the test set. Figures detailing
-other aspects of model performance can be viewed below.
+The model took 1.842 hours to train on a Tesla P100 GPU, with the following
+resulting training performance:
 
+|Class|Images|Labels|P|R|mAP@.5|mAP@.5:.95:|
+|---|---|---|---|---|---|---|
+|all|36|748|0.558|0.4|0.436|0.166|
+
+Performance on the test was also measured, with the following results:
+
+|Class|Images|Labels|P|R|mAP@.5|mAP@.5:.95:|
+|---|---|---|---|---|---|---|
+|all|24|921|0.458|0.336|0.353|0.114|
+
+Figures detailing other aspects of model performance follow.
+
+##### Confusion Matrix
 ![Confusion Matrix](./figs/confusion_matrix.png "Confusion Matrix")
 
+##### F1 Curve
 ![F1 Curve](./figs/F1_curve.png "F1 Curve")
 
+##### Precision Curve
 ![Precision Curve](./figs/P_curve.png "Precision Curve")
 
+##### Precision Recall Curve
 ![Precision Recall Curve](./figs/PR_curve.png "Precision Recall Curve")
 
+##### Recall Curve
 ![Recall Curve](./figs/R_curve.png "Recall Curve")
 
+##### Sample Predictions
 ![Sample Predictions](./figs/val_batch0_pred.jpg "Sample Predictions")
