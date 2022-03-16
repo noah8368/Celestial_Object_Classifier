@@ -4,12 +4,10 @@ Define routines to collect raw image data from the HLA, perform image stacking,
 and further filtering.
 '''
 
-from multiprocessing.sharedctypes import Value
 import cv2 as cv
 import glob
 import numpy as np
 import os
-import pandas as pd
 import requests
 import shutil
 
@@ -22,7 +20,7 @@ from urllib.error import URLError
 IMG_EXT = ".jpeg"
 
 
-def gen_img_set(img_path, coord_fs=None, process_manually=False):
+def gen_img_set(img_path, process_manually=False, num_img=50):
     """Downloads an processed image for each galaxy and nebula location.
 
     Probes the Hubble Legacy Archive for images of galaxies and nebulae.
@@ -34,6 +32,7 @@ def gen_img_set(img_path, coord_fs=None, process_manually=False):
         process_manually: If true, download exposures from the Hubble
                           Legacy Archive and manually process them rather
                           than pre-processed data.
+        num_img: Number of images to generate through manual processing.
     """
 
     def remove_exposures():
@@ -43,33 +42,43 @@ def gen_img_set(img_path, coord_fs=None, process_manually=False):
         for file in exposure_files:
             os.remove(file)
 
-    if coord_fs:
-        # Fetch images for given coordinates in coord_fs and save them locally.
-        coords = []
-        for f in coord_fs:
-            coords += __fetch_coords(f)
-        for ra, dec in coords:
+    def generate_rand_loc():
+        ra = round(np.random.uniform(0, 360), 3)
+        dec = round(np.rad2deg(np.arcsin(np.random.uniform(-1, 1))), 3)
+        return ra, dec
+
+    if process_manually:
+        # Randomly sample num_img celestial coordinates to pull images of, and
+        # manually process those images locally.
+        prev_locs = []
+        for img_idx in range(num_img):
+            ra, dec = generate_rand_loc()
+
             while True:
+                if (ra, dec) in prev_locs:
+                    # Generate a new location if the current location has
+                    # already been searched.
+                    ra, dec = generate_rand_loc()
+                    continue
+
                 try:
-                    __fetch_img(ra, dec, img_path, process_manually)
+                    __fetch_img(ra, dec, img_path, processing_manually=True)
+                except (cv.error, EmptySearch, NotEnoughExposures):
+                    # Generate a new location if the search returns
+                    # exposures that result in an unrecoverable error.
+                    remove_exposures()
+                    ra, dec = generate_rand_loc()
+                    continue
                 except (ConnectionError, URLError, timeout,
                         requests.exceptions.ConnectionError):
-                    if process_manually:
-                        remove_exposures()
-
                     # Retry the same coordinate pair if the connection fails.
                     continue
-                except (cv.error, EmptySearch, NotEnoughExposures, ValueError):
-                    if process_manually:
-                        remove_exposures()
+
+                prev_locs.append((ra, dec))
                 break
-    elif not process_manually:
+    else:
         # Download all high quality images in the Hubble Legacy Archive.
         __all_sky_search("HLSP", img_path)
-    else:
-        raise ValueError(
-            "Unable to specify all-sky search with manual processing"
-        )
 
 
 def __all_sky_search(img_type, data_path):
@@ -107,45 +116,6 @@ def __all_sky_search(img_type, data_path):
                 # Retry the same download if the connection fails.
                 continue
             break
-
-
-def __fetch_coords(coords_f):
-    """Returns the coordinates for each location denoted in an input file.
-
-    Args:
-        coords_f: Path to a *.tsv file with celestial coordinates.
-    """
-    coords = pd.read_csv(coords_f, sep='\t', engine="python")
-    ra_list = coords["RA"]
-    dec_list = coords["DEC"]
-
-    MIN_IN_HR = 60
-    SEC_IN_HR = 3600
-    RA_MAX = 360
-    DEG_IN_HR = 15
-    coords = []
-    for ra, dec in zip(ra_list, dec_list):
-        # Convert right ascencion from hh:mm:ss format to degrees.
-        ra_hr, ra_mm, ra_sec = ra.split(':')
-        ra_hr = float(ra_hr)
-        ra_mm = float(ra_mm)
-        ra_sec = float(ra_sec)
-        ra = DEG_IN_HR * (ra_hr + ra_mm / MIN_IN_HR + ra_sec / SEC_IN_HR)
-        if ra > RA_MAX:
-            ra %= RA_MAX
-        ra = round(ra, 3)
-
-        # Convert declination from dd:mm:ss format to degrees.
-        dec_deg, dec_mm, dec_sec = dec.split(':')
-        dec_deg = float(dec_deg)
-        dec_mm = float(dec_mm)
-        dec_sec = float(dec_sec)
-        dec = dec_deg + dec_mm / MIN_IN_HR + dec_sec / SEC_IN_HR
-        dec = round(dec, 3)
-
-        coords.append((ra, dec))
-
-    return coords
 
 
 def __fetch_img(ra, dec, data_path, processing_manually):

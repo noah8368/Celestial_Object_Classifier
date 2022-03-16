@@ -34,19 +34,17 @@ gen_img_set(img_path, coord_fs=None, process_manually=False)
 `img_path`: A file path to the desired location to save the generated image set
             locally.
 
-`coord_fs`: An iterable object of paths to `*.tsv` files containing celestial
-            coordinates of images to be downloaded from the HLA. In each of
-            these files, there must be two columns named `RA` and `DEC` with
-            right ascencion values in the `hh:mm:ss` format, and declination
-            values in the `dd:mm:ss` format.
-
 `process_manually`: A bool value indicating a preference to perform local image
                     processing. If set to `True`, the following image processing
-                    steps will be attempted:
+                    steps will be attempted on images sampled from randomly
+                    generated celestial coordinates:
 
 - Image stacking
 - Histogram equalization
 - Application of a bilateral filter
+
+`num_img`: The number of images to generate from randomly sampled celestial
+           coordinates. This value is only used if `process_manually=True`
 
 Image stacking is done using a module from a repo forked
 from Mathias Sundholm's [image_stacking](https://github.com/maitek/image_stacking)

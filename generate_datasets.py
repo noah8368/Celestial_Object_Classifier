@@ -13,14 +13,14 @@ import shutil
 from astro_img_handling import gen_img_set, IMG_EXT
 
 
-def create_datasets(coord_fs=None, processing_manually=False,
+def create_datasets(processing_manually=False, num_imgs=50,
                     train_portion=0.7, validation_portion=0.2,
                     test_portion=0.1):
     """Collects and divides data from the Hubble Legacy Archive for labelling.
 
     Args:
-        coord_fs: A tuple of file paths to tsv files containing celestial
-                  coordinates of locations to fetch images of.
+        processing_manually: A bool value indicating whether custom processing
+                             on randomly selected images should be used.
         train_portion: Portion of data to use to train model.
         validation_portion: Portion of data to use to tune hyperparameters.
         test_portion: Portion of data to use to test the model.
@@ -38,7 +38,8 @@ def create_datasets(coord_fs=None, processing_manually=False,
     os.mkdir(img_path)
 
     # Fetch data from the Hubble Legacy Archive.
-    gen_img_set(img_path, coord_fs, process_manually=processing_manually)
+    gen_img_set(img_path, process_manually=processing_manually,
+                num_img=num_imgs)
     imgs = glob.glob(os.path.join(img_path, "*%s" % IMG_EXT))
     random.shuffle(imgs)
     num_samples = len(imgs)
@@ -71,4 +72,4 @@ def create_datasets(coord_fs=None, processing_manually=False,
 
 
 if __name__ == "__main__":
-    create_datasets()
+    create_datasets(processing_manually=True)
