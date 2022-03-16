@@ -13,8 +13,9 @@ import shutil
 from astro_img_handling import gen_img_set, IMG_EXT
 
 
-def create_datasets(coord_fs=None, train_portion=0.7,
-                    validation_portion=0.2, test_portion=0.1):
+def create_datasets(coord_fs=None, processing_manually=False,
+                    train_portion=0.7, validation_portion=0.2,
+                    test_portion=0.1):
     """Collects and divides data from the Hubble Legacy Archive for labelling.
 
     Args:
@@ -32,12 +33,12 @@ def create_datasets(coord_fs=None, train_portion=0.7,
     img_path = os.path.join(os.curdir, "images")
     # Delete the folder "./images" if it exists to avoid mixing
     # datasets and non-image files into the current set of data.
-    """if os.path.exists(img_path):
+    if os.path.exists(img_path):
         shutil.rmtree(img_path)
-    os.mkdir(img_path)"""
+    os.mkdir(img_path)
 
     # Fetch data from the Hubble Legacy Archive.
-    # gen_img_set(img_path, coord_fs, process_manually=True)
+    gen_img_set(img_path, coord_fs, process_manually=processing_manually)
     imgs = glob.glob(os.path.join(img_path, "*%s" % IMG_EXT))
     random.shuffle(imgs)
     num_samples = len(imgs)

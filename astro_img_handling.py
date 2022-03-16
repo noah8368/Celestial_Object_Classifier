@@ -4,6 +4,7 @@ Define routines to collect raw image data from the HLA, perform image stacking,
 and further filtering.
 '''
 
+from multiprocessing.sharedctypes import Value
 import cv2 as cv
 import glob
 import numpy as np
@@ -62,9 +63,13 @@ def gen_img_set(img_path, coord_fs=None, process_manually=False):
                     if process_manually:
                         remove_exposures()
                 break
-    else:
+    elif not process_manually:
         # Download all high quality images in the Hubble Legacy Archive.
         __all_sky_search("HLSP", img_path)
+    else:
+        raise ValueError(
+            "Unable to specify all-sky search with manual processing"
+        )
 
 
 def __all_sky_search(img_type, data_path):
