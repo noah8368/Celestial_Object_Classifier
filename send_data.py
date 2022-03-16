@@ -4,7 +4,9 @@ Set up a TCP connection between a server and client.
 """
 
 import os
+import re
 import socket
+import subprocess
 
 
 _CONNECTION_BUFFER_SIZE = 4096
@@ -22,28 +24,18 @@ class ServerPortal:
         self.socket.bind(('', _SERVER_PORT))
         self.socket.listen()
 
-    def recv(self):
+    def recv(self, save_f):
         """Waits for a connection request, and saves a received image file."""
 
         self.conn, _ = self.socket.accept()
-        img_f_name = str(self.recv_data_count) + ".jpeg"
-        img_f_path = os.path.join(os.curdir, self.save_dir, img_f_name)
-        print("CONNECTION ACCEPTED")
-        img_f = open(img_f_path, "wb")
+        img_f = open(save_f, "wb")
         # Accept,  write image data locally from the client with a buffer.
         while True:
-            print("CHECKING CONNECTION")
             data = self.conn.recv(_CONNECTION_BUFFER_SIZE)
-            print("Receiving data request...")
             if not data:
-                print("DATA RECEPTION FINISHED")
                 break
-            print("WRITING DATA")
             img_f.write(data)
-            print("FINISHED WRITING DATA")
-        print("GOT OUT OF LOOP")
         img_f.close()
-        print("FINISHED RECEVING DATA")
         self.recv_data_count += 1
         return True
 
@@ -56,17 +48,38 @@ class ServerPortal:
         data_f = open(f, "rb")
         self.conn.sendfile(data_f)
         self.conn.close()
-        print("SENT DATA")
 
 
 class ClientPortal:
-    def __init__(self, save_dir=os.curdir):
+    def __init__(self, save_dir=os.curdir,
+                 server_hostname="raspberrypi.lan"):
         """Binds the server to all available interfaces."""
 
+        # Create a socket.
         self.save_dir = save_dir
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # TODO: Use a ping subprocess to get the IP address of Raspberry Pi.
-        server_addr = "127.0.0.1"
+
+        try:
+            # Use the ping subprocess to get the IP address of Raspberry Pi.
+            response = subprocess.check_output(
+                ["ping", "-c", '3', server_hostname],
+                stderr=subprocess.STDOUT,
+                universal_newlines=True
+            )
+        except subprocess.CalledProcessError:
+            raise ConnectionAbortedError("Unable to establish connection")
+
+        # Parse the repsonse from ping to collect the IPv4 address.
+        if response == '':
+            raise ConnectionAbortedError("Unable to establish connection")
+        server_addr = re.search(
+            '(?:[0-9]{1,3}\.){3}[0-9]{1,3}|$',
+            response
+        ).group()
+        if server_addr == '':
+            raise ConnectionAbortedError("Unable to establish connection")
+
+        # Connect the socket to the client using the collect IP address.
         self.socket.connect((server_addr, _SERVER_PORT))
 
     def make_request(self, send_f, recv_f):
@@ -79,18 +92,13 @@ class ClientPortal:
         # Tell the server that it's done sending data, but can still receive.
         self.socket.shutdown(socket.SHUT_WR)
 
-        print("SENT FILE")
-
         # Receive and save the server's response.
         resp_f = open(recv_f, "wb")
         with self.socket:
             # Accept,  write image data locally from the client with a buffer.
             while True:
                 data = self.socket.recv(_CONNECTION_BUFFER_SIZE)
-                print("Receiving data response..." + str(data))
                 if not data:
-                    print("DATA RECEPTION FINISHED")
                     break
                 resp_f.write(data)
         resp_f.close()
-        print("REQUEST SUCCESSFULLY COMPLETED")
