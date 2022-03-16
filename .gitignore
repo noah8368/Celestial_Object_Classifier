@@ -5,3 +5,5 @@ __pycache__
 # Ignore dataset files.
 dataset
 coco128
+
+ex_files
