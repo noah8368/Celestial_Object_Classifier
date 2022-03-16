@@ -29,7 +29,7 @@ from the Hubble Archive.
 The only public function defined for outside user use is `gen_img_set()`, which
 fetches image data from the HLA with the following definition and options:
 ```
-gen_img_set(img_path, coord_fs=None, process_manually=False)
+gen_img_set(img_path, process_manually=False, num_img=50)
 ```
 `img_path`: A file path to the desired location to save the generated image set
             locally.
