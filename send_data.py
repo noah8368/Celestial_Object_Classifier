@@ -10,7 +10,7 @@ import subprocess
 
 
 _CONNECTION_BUFFER_SIZE = 4096
-_SERVER_PORT = 5000
+_SERVER_PORT = 5001
 
 
 class ServerPortal:
@@ -53,7 +53,7 @@ class ServerPortal:
 class ClientPortal:
     def __init__(self, save_dir=os.curdir,
                  server_hostname="raspberrypi.lan"):
-        """Binds the server to all available interfaces."""
+        """Inits a client object connected to a server on the same LAN."""
 
         # Create a socket.
         self.save_dir = save_dir
