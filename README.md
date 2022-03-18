@@ -185,4 +185,6 @@ Figures detailing other aspects of model performance follow.
 ![Recall Curve](./figs/R_curve.png "Recall Curve")
 
 #### Sample Predictions
-![Sample Predictions](./figs/val_batch0_pred.jpg "Sample Predictions")
+![Sample Prediction 1](./figs/sample_pred1.jpg "Sample Prediction 1")
+
+![Sample Prediction 2](./figs/sample_pred2.png "Sample Prediction 2")
