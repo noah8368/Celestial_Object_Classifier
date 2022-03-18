@@ -1,6 +1,3 @@
 [submodule "image_stacking"]
 	path = image_stacking
 	url = git@github.com:noah8368/image_stacking.git
-[submodule "yolov5"]
-	path = yolov5
-	url = git@github.com:noah8368/yolov5.git

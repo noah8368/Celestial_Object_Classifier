@@ -8,18 +8,45 @@ The Celestial Object Classifer (COC) is a complete galaxy object detection
 package which include both an API capable of fetching/processing data from the
 [Hubble Legacy Archive (HLA)](https://hla.stsci.edu/hlaview.html) and scripts to run real-time galaxy object detection on a Raspberry Pi.
 
-### Prerequistes
+### Setup
 
-The `COC` software package requires the following modules:
-- [astropy](https://www.astropy.org/)
-- [numpy](https://numpy.org/)
-- [requests](https://docs.python-requests.org/en/latest/)
-- [opencv-python](https://pypi.org/project/opencv-python/)
-- [scipy](https://scipy.org/)
-- [torch](https://pypi.org/project/torch/)
-- [torchvision](https://pypi.org/project/torchvision/)
+#### Clientside Application
 
-### Image Handling API Usage
+To setup the environment to run the clientside application, run the following.
+```
+git clone https://github.com/noah8368/celestial_object_classifier.git
+cd celestial_object_classifier
+pip3 install -r requirements.txt
+```
+Please note this requires [pip](https://pip.pypa.io/en/stable/) be installed.
+
+#### Raspberry Pi Server
+
+To setup the serverside application, download the object detection model's
+weights [here](https://drive.google.com/file/d/1eE6ohDqo3WekTg44ltv4GGH2mYsNT4DH/view?usp=sharing) and perform the following commands on a Raspberry Pi 4.
+
+```
+git clone https://github.com/ultralytics/yolov5
+cd yolov5
+pip3 install -r requirements.txt
+mkdir weights
+mv /path/to/weights/coc_weights.pt weights
+
+cd ..
+git clone https://github.com/noah8368/celestial_object_classifier.git
+cd celestial_object_classifier
+pip3 install -r requirements.txt
+cp raspi_server.py ../yolov5 
+cp send_data.py ../yolov5
+```
+
+Please note, **YOLOv5 requires a 64-bit OS**. Please make sure to install a
+64-bit distro onto your Raspberry Pi, as opposed to the default flavor as
+Raspbian, which is 32-bit.
+
+### Usage
+
+#### Image Handling API
 
 The `AstroImgHandling` API defined in `astro_img_handling.py` contains methods
 allowing users to download HLA data from a list of supplied coordinates,
@@ -50,7 +77,42 @@ Image stacking is done using a module from a repo forked
 from Mathias Sundholm's [image_stacking](https://github.com/maitek/image_stacking)
 implementation.
 
-### Galaxy Object Detection 
+#### Client Application
+
+After the server application is running, you may run the client application
+using `coc.py`, found in the `celestial_object_classifier` directory.
+```
+usage: coc.py [-h] [--server SERVER] Input Output
+
+Label an image.
+
+positional arguments:
+  Input            Input file path
+  Output           Output file path
+
+optional arguments:
+  -h, --help       show this help message and exit
+  --server SERVER  Server hostname
+```
+where `[INPUT]` is the path to the image to be labeled, and `[OUTPUT]` is
+the desired path to save the labeled image received from the Raspberry Pi
+server. `[SERVER]` is the hostname of the Raspberry Pi server. This may be found
+using the [nmap](https://linux.die.net/man/1/nmap) command. If not provided,
+`[SERVER]` defaults to `raspberrypi.lan` which is the default hostname of a 
+Raspberry Pi on a network with no other Raspberry Pis connected.
+
+Please note, **the Raspberry Pi server must be on the same LAN as the client
+during operation**.
+
+#### Server Application
+
+To start-up the server application on the Raspberry Pi, simply run
+`raspi_server.py` without any command-line arguments that can be found in
+`~/yolov5` after setup. Please note this program will never terminate under
+normal conditions, and must be stopped by sending a shutdown signal to the
+process with `^C`.
+
+### Implementation
 
 Object detection is performed by a neural network with the YOLOv5 architecture
 implemented on a Raspberry Pi.
@@ -83,7 +145,14 @@ Our model weights (67.9 Mb) may be downloaded [here](https://drive.google.com/fi
 Model Summary: 378 layers, 35248920 parameters, 0 gradients, 49.0 GFLOPs
 ```
 
-#### Performance
+#### Server-Client Design
+
+The client and server applications defined in `coc.py` and `raspi_server.py`
+respectively establish a TCP connection to communicate with each other. All
+networking rountines are defined in the types `ServerPortal` and
+`ClientPortal` defined in `send_data.py`.
+
+### Performance
 
 The model took 1.842 hours to train on a Tesla P100 GPU, with the following
 resulting training performance:
@@ -100,20 +169,20 @@ Performance on the test was also measured, with the following results:
 
 Figures detailing other aspects of model performance follow.
 
-##### Confusion Matrix
+#### Confusion Matrix
 ![Confusion Matrix](./figs/confusion_matrix.png "Confusion Matrix")
 
-##### F1 Curve
+#### F1 Curve
 ![F1 Curve](./figs/F1_curve.png "F1 Curve")
 
-##### Precision Curve
+#### Precision Curve
 ![Precision Curve](./figs/P_curve.png "Precision Curve")
 
-##### Precision Recall Curve
+#### Precision Recall Curve
 ![Precision Recall Curve](./figs/PR_curve.png "Precision Recall Curve")
 
-##### Recall Curve
+#### Recall Curve
 ![Recall Curve](./figs/R_curve.png "Recall Curve")
 
-##### Sample Predictions
+#### Sample Predictions
 ![Sample Predictions](./figs/val_batch0_pred.jpg "Sample Predictions")
